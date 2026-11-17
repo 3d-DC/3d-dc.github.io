@@ -10,7 +10,7 @@ Démo Three.js d'un datacenter modulaire sur deux sites (`DC1`, `DC2`) reliés p
 
 ## Déploiement
 
-GitHub Pages, par l'action `.github/workflows/deploy.yml` : à chaque envoi sur `main`, elle installe, compile et publie `dist/`. Réglage unique dans le dépôt : Settings › Pages › Source : « GitHub Actions ». Adresse : https://benyacinesawadogo.github.io/3D-DC/. `vite.config.ts` utilise des chemins relatifs (`base: './'`), le site fonctionne donc quel que soit le nom du dépôt.
+GitHub Pages, par l'action `.github/workflows/deploy.yml` : à chaque envoi sur `main`, elle installe, compile et publie `dist/`. Réglage unique dans le dépôt : Settings › Pages › Source : « GitHub Actions ». Dépôt : https://github.com/3d-DC/3d-dc.github.io (organisation `3d-DC`, dépôt public nommé d'après le domaine, donc servi à la racine). Adresse du site : https://3d-dc.github.io. `vite.config.ts` utilise des chemins relatifs (`base: './'`), le site fonctionne donc quel que soit le nom du dépôt.
 
 ## Technique
 
