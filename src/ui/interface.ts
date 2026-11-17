@@ -1,6 +1,7 @@
 import { COMPOSANTS, compositionBaie } from '../baies';
 import { CATALOGUE, COULEUR_FAMILLE, NOM_VUE } from '../catalog';
 import { DESCRIPTION_CIRCUIT, NOM_CIRCUIT, type EtatIncendie } from '../scene/circuits';
+import { MOBILE } from '../scene/outils';
 import type { Lecture } from '../scenarios/lecteur';
 import {
   CIRCUITS,
@@ -68,6 +69,10 @@ export interface Actions {
   /** Modifie le volume ou coupe le son. */
   son(modif: Partial<ReglagesSon>): void;
   quitterPromenade(): void;
+  /** Joystick tactile de la visite : `x` vers la droite, `y` vers l'avant (-1 à 1). */
+  joystick(x: number, y: number): void;
+  /** Bouton « Ouvrir » de la visite tactile : ouvre l'équipement visé. */
+  ouvrirVisee(): void;
 }
 
 /* ---------- Pictogrammes (tracés simples, couleur du texte) ---------- */
@@ -186,20 +191,22 @@ const LEGENDE: readonly Famille[] = [
 /** Volets de la barre d'outils, un seul ouvert à la fois. */
 type Outil = 'scenarios' | 'construction' | 'visite' | 'circuits' | 'vues' | 'affichage' | 'ambiance' | 'legende';
 
-const OUTILS: readonly { readonly id: Outil; readonly titre: string }[] = [
-  { id: 'scenarios', titre: 'Scénarios' },
-  { id: 'construction', titre: 'Construction modulaire' },
-  { id: 'visite', titre: 'Visite à pied' },
-  { id: 'circuits', titre: 'Circuits techniques' },
-  { id: 'vues', titre: 'Points de vue' },
-  { id: 'affichage', titre: 'Affichage' },
-  { id: 'ambiance', titre: 'Lumière et son' },
-  { id: 'legende', titre: 'Légende' },
+const OUTILS: readonly { readonly id: Outil; readonly titre: string; readonly court: string }[] = [
+  { id: 'scenarios', titre: 'Scénarios', court: 'Scénarios' },
+  { id: 'construction', titre: 'Construction modulaire', court: 'Modules' },
+  { id: 'visite', titre: 'Visite à pied', court: 'Visite' },
+  { id: 'circuits', titre: 'Circuits techniques', court: 'Circuits' },
+  { id: 'vues', titre: 'Points de vue', court: 'Vues' },
+  { id: 'affichage', titre: 'Affichage', court: 'Affichage' },
+  { id: 'ambiance', titre: 'Lumière et son', court: 'Ambiance' },
+  { id: 'legende', titre: 'Légende', court: 'Légende' },
 ];
 
 const CLE_MENU = 'dc-modulaire.menu';
 
-const AIDE_SITE = 'Clic : fiche · Double-clic : entrer ou ouvrir · Glisser : tourner · Molette : zoomer · V : première personne · H : masquer l’interface';
+const AIDE_SITE = MOBILE
+  ? 'Toucher : fiche · Deux touchers : entrer ou ouvrir · Un doigt : tourner · Deux doigts : zoomer, déplacer'
+  : 'Clic : fiche · Double-clic : entrer ou ouvrir · Glisser : tourner · Molette : zoomer · V : première personne · H : masquer l’interface';
 
 type CleCurseur = 'luminosite' | 'lampe';
 
@@ -252,6 +259,11 @@ function carte(classe: string): { racine: HTMLElement; entete: HTMLElement; corp
   const corps = creer('div', 'carte-corps');
   racine.append(entete, corps);
   return { racine, entete, corps };
+}
+
+/** Écran étroit (téléphone) : volets et fiches partagent le bas de l'écran. */
+function ecranEtroit(): boolean {
+  return window.matchMedia('(max-width: 760px)').matches;
 }
 
 /* ---------- Interface ---------- */
@@ -330,12 +342,17 @@ export class Interface {
     // Barre d'outils : un bouton par volet, puis le son et le masquage de l'interface.
     for (const o of OUTILS) {
       const b = boutonIcone(o.id, o.titre, () => this.ouvrirOutil(this.outilOuvert === o.id ? null : o.id), 'bouton-icone rail-bouton');
+      b.append(creer('span', 'rail-libelle', o.court));
       this.boutonsRail.set(o.id, b);
       this.rail.append(b);
     }
     this.rail.append(creer('span', 'rail-separateur'));
     this.boutonSonRail = boutonIcone('son', 'Couper ou rétablir le son (N)', () => actions.son({ coupe: !(this.reglagesSon?.coupe ?? false) }), 'bouton-icone rail-bouton');
-    this.rail.append(this.boutonSonRail, boutonIcone('masquer', 'Masquer l’interface (H)', () => this.basculerHud(), 'bouton-icone rail-bouton'));
+    const masquer = boutonIcone('masquer', 'Masquer l’interface (H)', () => this.basculerHud(), 'bouton-icone rail-bouton');
+    masquer.append(creer('span', 'rail-libelle', 'Masquer'));
+    this.rail.append(this.boutonSonRail, masquer);
+    racine.classList.toggle('tactile', MOBILE);
+    this.construireCommandesTactiles();
 
     // Volet : en-tête et contenu de l'outil ouvert.
     const enteteVolet = creer('header', 'volet-entete');
@@ -741,6 +758,7 @@ export class Interface {
     const { racine, entete, corps } = this.fiche;
     racine.hidden = ref === null;
     if (!ref) return;
+    if (ecranEtroit()) this.ouvrirOutil(null);
     racine.classList.remove('reduite');
     const spec = CATALOGUE[ref.kind];
     const lieu = [ref.site, ref.module ? `module ${ref.module}` : null].filter(Boolean).join(' · ');
@@ -766,6 +784,7 @@ export class Interface {
     const { racine, entete, corps } = this.fiche;
     racine.hidden = kind === null;
     if (!kind) return;
+    if (ecranEtroit()) this.ouvrirOutil(null);
     racine.classList.remove('reduite');
     const spec = COMPOSANTS[kind];
     this.remplirEntete(entete, racine, 'Composant', spec.nom, () => this.afficherComposant(null));
@@ -800,11 +819,17 @@ export class Interface {
     if (etat.examen) etape(etat.examen, true);
     this.fil.append(etapes);
 
-    this.consigne = etat.examen
-      ? 'Glisser : tourner la pièce · Molette : zoomer · Clic : la remettre en place'
-      : etat.serveur
-        ? 'Glisser : se déplacer · Clic droit : tourner · Molette : zoomer · Clic sur une pièce : la regarder'
-        : 'Survol : marque et modèle · Clic : ouvrir l’équipement · Glisser : tourner autour';
+    this.consigne = MOBILE
+      ? etat.examen
+        ? 'Un doigt : tourner la pièce · Deux doigts : zoomer · Toucher : la remettre en place'
+        : etat.serveur
+          ? 'Un doigt : se déplacer · Deux doigts : zoomer et tourner · Toucher une pièce : la regarder'
+          : 'Toucher un équipement : l’ouvrir · Un doigt : tourner autour · Deux doigts : zoomer'
+      : etat.examen
+        ? 'Glisser : tourner la pièce · Molette : zoomer · Clic : la remettre en place'
+        : etat.serveur
+          ? 'Glisser : se déplacer · Clic droit : tourner · Molette : zoomer · Clic sur une pièce : la regarder'
+          : 'Survol : marque et modèle · Clic : ouvrir l’équipement · Glisser : tourner autour';
     this.survol.textContent = this.consigne;
     this.survol.classList.remove('actif', 'invite');
 
@@ -868,15 +893,22 @@ export class Interface {
       li.append(groupe, creer('span', undefined, texte));
       touches.append(li);
     };
-    ligne(['Z', 'Q', 'S', 'D'], 'avancer, se décaler');
-    ligne(['Souris'], 'regarder');
-    ligne(['←', '→'], 'tourner');
-    ligne(['Maj'], 'courir');
-    ligne(['Clic'], 'fiche de l’équipement visé');
-    ligne(['E'], 'ouvrir la baie visée');
-    ligne(['L'], 'lampe');
-    ligne(['V'], 'vue d’ensemble');
-    ligne(['Échap'], 'libérer la souris, puis sortir');
+    if (MOBILE) {
+      ligne(['Joystick'], 'avancer, se décaler (à fond : courir)');
+      ligne(['Glisser'], 'regarder autour de soi');
+      ligne(['Toucher'], 'fiche de l’équipement visé');
+      ligne(['Ouvrir'], 'ouvrir la baie visée');
+    } else {
+      ligne(['Z', 'Q', 'S', 'D'], 'avancer, se décaler');
+      ligne(['Souris'], 'regarder');
+      ligne(['←', '→'], 'tourner');
+      ligne(['Maj'], 'courir');
+      ligne(['Clic'], 'fiche de l’équipement visé');
+      ligne(['E'], 'ouvrir la baie visée');
+      ligne(['L'], 'lampe');
+      ligne(['V'], 'vue d’ensemble');
+      ligne(['Échap'], 'libérer la souris, puis sortir');
+    }
     corps.append(
       touches,
       creer('h3', 'intertitre', 'Exposition'),
@@ -889,6 +921,13 @@ export class Interface {
     );
     this.dansPromenade = false;
     this.barrePromenade.append(entete, corps);
+    // Au doigt, le volet commence replié : la vue et le joystick restent dégagés.
+    if (MOBILE) {
+      this.barrePromenade.classList.add('reduite');
+      reduire.replaceChildren(svg('agrandir'));
+    } else {
+      this.barrePromenade.classList.remove('reduite');
+    }
   }
 
   majEclairage(e: Eclairage): void {
@@ -988,6 +1027,53 @@ export class Interface {
     return entree;
   }
 
+  /* ---------- Commandes tactiles de la visite ---------- */
+
+  /** Joystick (en bas à gauche) et boutons « Ouvrir » et « Sortir » (en bas à droite), visibles à pied sur écran tactile. */
+  private construireCommandesTactiles(): void {
+    const joystick = creer('div', 'joystick');
+    const manette = creer('div', 'manette');
+    joystick.append(manette);
+    joystick.setAttribute('aria-label', 'Joystick de déplacement');
+    let doigt: number | null = null;
+    const rayon = 46;
+    const suivre = (e: PointerEvent): void => {
+      const cadre = joystick.getBoundingClientRect();
+      let dx = e.clientX - (cadre.left + cadre.width / 2);
+      let dy = e.clientY - (cadre.top + cadre.height / 2);
+      const d = Math.hypot(dx, dy);
+      if (d > rayon) {
+        dx = (dx / d) * rayon;
+        dy = (dy / d) * rayon;
+      }
+      manette.style.transform = `translate(${dx}px, ${dy}px)`;
+      this.actions.joystick(dx / rayon, -dy / rayon);
+    };
+    const relacher = (e: PointerEvent): void => {
+      if (e.pointerId !== doigt) return;
+      doigt = null;
+      manette.style.transform = '';
+      this.actions.joystick(0, 0);
+    };
+    joystick.addEventListener('pointerdown', (e) => {
+      doigt = e.pointerId;
+      joystick.setPointerCapture(e.pointerId);
+      suivre(e);
+    });
+    joystick.addEventListener('pointermove', (e) => {
+      if (e.pointerId === doigt) suivre(e);
+    });
+    joystick.addEventListener('pointerup', relacher);
+    joystick.addEventListener('pointercancel', relacher);
+
+    const boutons = creer('div', 'boutons-visite');
+    boutons.append(
+      boutonOutil('remettre', 'Ouvrir', () => this.actions.ouvrirVisee()),
+      boutonOutil('site', 'Sortir', () => this.actions.quitterPromenade()),
+    );
+    this.racine.append(joystick, boutons);
+  }
+
   /* ---------- Consigne et survol ---------- */
 
   majRegard(libre: boolean): void {
@@ -1004,9 +1090,15 @@ export class Interface {
   private majConsigne(): void {
     if (this.enInspection) return;
     const site = this.sitePromenade;
-    const invite = site !== null && !this.regardLibre;
+    const invite = site !== null && !this.regardLibre && !MOBILE;
     this.consigne =
-      site === null ? AIDE_SITE : invite ? 'Cliquez dans la scène pour regarder à la souris' : 'Échap : libérer la souris';
+      site === null
+        ? AIDE_SITE
+        : MOBILE
+          ? 'Joystick : avancer · Glisser : regarder · Toucher : fiche de l’équipement visé'
+          : invite
+            ? 'Cliquez dans la scène pour regarder à la souris'
+            : 'Échap : libérer la souris';
     this.survol.textContent = this.consigne;
     this.survol.classList.remove('actif');
     this.survol.classList.toggle('invite', invite);

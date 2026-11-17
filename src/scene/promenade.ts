@@ -9,6 +9,7 @@ const VITESSE_ROTATION = 1.9;
 /** Sensibilité de la souris, souris capturée ou glisser. */
 const SENSIBILITE_LIBRE = 0.0022;
 const SENSIBILITE_GLISSER = 0.0042;
+const SENSIBILITE_DOIGT = 0.0055;
 /** Réactivité de l'accélération et du freinage (plus grand = plus vif). */
 const REACTIVITE = 9;
 const INCLINAISON_MAX = 1.35;
@@ -51,7 +52,10 @@ export class Promenade {
   private foulee = 0;
   private readonly vitesse = new THREE.Vector2();
   private readonly touches = new Set<string>();
-  private glisser: { x: number; y: number } | null = null;
+  /** Glisser en cours pour regarder (souris non capturée ou doigt), avec l'identifiant du pointeur. */
+  private glisser: { id: number; x: number; y: number } | null = null;
+  /** Joystick tactile : x vers la droite, y vers l'avant (-1 à 1). */
+  private readonly joystick = new THREE.Vector2();
   private capturee = false;
   /** Le clic qui capture la souris ne doit pas aussi sélectionner un équipement. */
   private clicDeCapture = false;
@@ -89,14 +93,23 @@ export class Promenade {
 
     canvas.addEventListener('pointerdown', (e) => {
       if (!this.actif || !this.disponible() || e.button !== 0) return;
-      if (!this.capturee) {
+      // Au doigt, pas de capture : le regard suit le glisser.
+      if (e.pointerType === 'mouse' && !this.capturee) {
         this.clicDeCapture = true;
         this.capturer();
       }
-      this.glisser = { x: e.clientX, y: e.clientY };
+      if (!this.glisser) this.glisser = { id: e.pointerId, x: e.clientX, y: e.clientY };
     });
-    window.addEventListener('pointerup', () => {
-      this.glisser = null;
+    const relacher = (e: PointerEvent): void => {
+      if (this.glisser?.id === e.pointerId) this.glisser = null;
+    };
+    window.addEventListener('pointerup', relacher);
+    window.addEventListener('pointercancel', relacher);
+    window.addEventListener('pointermove', (e) => {
+      if (!this.actif || !this.disponible() || this.capturee || this.glisser?.id !== e.pointerId) return;
+      const sensibilite = e.pointerType === 'touch' ? SENSIBILITE_DOIGT : SENSIBILITE_GLISSER;
+      this.tourner((e.clientX - this.glisser.x) * sensibilite, (e.clientY - this.glisser.y) * sensibilite);
+      this.glisser = { id: e.pointerId, x: e.clientX, y: e.clientY };
     });
     document.addEventListener('pointerlockchange', () => {
       const capturee = document.pointerLockElement === this.canvas;
@@ -107,14 +120,13 @@ export class Promenade {
     });
     document.addEventListener('mousemove', (e) => {
       if (!this.actif || !this.disponible()) return;
-      if (this.capturee) {
-        this.tourner(e.movementX * SENSIBILITE_LIBRE, e.movementY * SENSIBILITE_LIBRE);
-      } else if (this.glisser) {
-        // Sans capture (navigateur qui la refuse), le regard suit le glisser.
-        this.tourner((e.clientX - this.glisser.x) * SENSIBILITE_GLISSER, (e.clientY - this.glisser.y) * SENSIBILITE_GLISSER);
-        this.glisser = { x: e.clientX, y: e.clientY };
-      }
+      if (this.capturee) this.tourner(e.movementX * SENSIBILITE_LIBRE, e.movementY * SENSIBILITE_LIBRE);
     });
+  }
+
+  /** Joystick tactile : `x` vers la droite, `y` vers l'avant, chacun de -1 à 1 (0, 0 au repos). */
+  deplacementTactile(x: number, y: number): void {
+    this.joystick.set(x, y);
   }
 
   get enCours(): boolean {
@@ -149,6 +161,7 @@ export class Promenade {
   arreter(): void {
     this.actif = false;
     this.touches.clear();
+    this.joystick.set(0, 0);
     this.glisser = null;
     this.liberer();
   }
@@ -180,15 +193,18 @@ export class Promenade {
     if (rotation !== 0) this.cap += rotation * VITESSE_ROTATION * dt;
 
     // Vitesse visée dans le plan, puis accélération ou freinage progressifs.
-    const av = appui(AVANCER) - appui(RECULER);
-    const lat = appui(DROITE) - appui(GAUCHE);
+    // Clavier et joystick tactile s'additionnent ; le joystick poussé à fond fait courir.
+    const av = THREE.MathUtils.clamp(appui(AVANCER) - appui(RECULER) + this.joystick.y, -1, 1);
+    const lat = THREE.MathUtils.clamp(appui(DROITE) - appui(GAUCHE) + this.joystick.x, -1, 1);
     const cible = new THREE.Vector2();
-    if (av !== 0 || lat !== 0) {
+    if (Math.abs(av) > 0.05 || Math.abs(lat) > 0.05) {
       const sin = Math.sin(this.cap);
       const cos = Math.cos(this.cap);
       // Avant : (-sin, -cos) ; droite : (cos, -sin).
-      cible.set(-sin * av + cos * lat, -cos * av - sin * lat).normalize();
-      cible.multiplyScalar(appui(COURIR) ? VITESSE_COURSE : VITESSE_MARCHE);
+      cible.set(-sin * av + cos * lat, -cos * av - sin * lat);
+      if (cible.lengthSq() > 1) cible.normalize();
+      const course = appui(COURIR) === 1 || this.joystick.length() > 0.95;
+      cible.multiplyScalar(course ? VITESSE_COURSE : VITESSE_MARCHE);
     }
     this.vitesse.lerp(cible, 1 - Math.exp(-REACTIVITE * dt));
     if (this.vitesse.lengthSq() < 1e-5) this.vitesse.set(0, 0);

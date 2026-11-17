@@ -20,7 +20,7 @@ import { phaseIncendie } from './circuits';
 import { creerEnvironnement, POS_ESPLANADE, type Environnement } from './environnement';
 import { Flux, traceArrondi, type Sens } from './flux';
 import { Inspection } from './inspection';
-import { boite, cylindre, estVisible, marquer, materiau, SITE_X, trouverEquipement, Y_DALLE } from './outils';
+import { boite, champVertical, cylindre, estVisible, marquer, materiau, MOBILE, SITE_X, trouverEquipement, Y_DALLE } from './outils';
 import { Promenade } from './promenade';
 import { DALLE, MODULE_X, Site, zModule } from './site';
 
@@ -157,7 +157,8 @@ export class Monde {
     // Tampon de profondeur logarithmique : la scène va de quelques centimètres (visite à pied)
     // à plusieurs centaines de mètres ; sans lui, les surfaces proches l'une de l'autre scintillent.
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    // Sur mobile, définition et ombres plus légères : la démo reste fluide sur un téléphone.
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, MOBILE ? 1.25 : 1.5));
     this.renderer.shadowMap.enabled = true;
     // Les ombres ne sont recalculées que si quelque chose bouge (voir `maj`).
     this.renderer.shadowMap.autoUpdate = false;
@@ -273,7 +274,7 @@ export class Monde {
     this.transition = null;
     this.controles.enabled = false;
     this.camera.near = 0.05;
-    this.camera.fov = 68;
+    this.camera.fov = champVertical(68, this.camera.aspect, 95);
     this.camera.clearViewOffset();
     this.camera.updateProjectionMatrix();
     this.lampe.intensity = LAMPE_MAX * this.eclairage.lampe;
@@ -292,7 +293,7 @@ export class Monde {
     this.lampe.intensity = 0;
     this.calque.classList.remove('promenade');
     this.camera.near = 0.3;
-    this.camera.fov = 42;
+    this.camera.fov = champVertical(42, this.camera.aspect, 100);
     this.controles.enabled = !this.inspection.actif;
     this.redimensionner();
     this.allerA(site === 'DC1' ? 'dc1-interieur' : 'dc2-interieur');
@@ -517,7 +518,7 @@ export class Monde {
     const soleil = this.soleil;
     soleil.position.copy(direction).multiplyScalar(160);
     soleil.castShadow = true;
-    soleil.shadow.mapSize.set(4096, 4096);
+    soleil.shadow.mapSize.setScalar(MOBILE ? 2048 : 4096);
     const ombre = soleil.shadow.camera;
     ombre.left = -85;
     ombre.right = 85;
@@ -631,12 +632,26 @@ export class Monde {
 
   private ecouterPointeur(): void {
     let depart: { x: number; y: number } | null = null;
+    /** Dernier toucher, pour reconnaître un double toucher (les navigateurs mobiles n'émettent pas toujours `dblclick`). */
+    let dernierToucher = { t: 0, x: 0, y: 0 };
+    let doubleToucher = 0;
     this.canvas.addEventListener('pointerdown', (e) => {
       depart = { x: e.clientX, y: e.clientY };
     });
     this.canvas.addEventListener('pointerup', (e) => {
-      // Un glisser sert à orbiter : seul un clic franc sélectionne.
-      if (!depart || Math.hypot(e.clientX - depart.x, e.clientY - depart.y) > 5) return;
+      // Un glisser sert à orbiter : seul un clic franc sélectionne (un doigt bouge un peu plus qu'une souris).
+      const tolerance = e.pointerType === 'touch' ? 12 : 5;
+      if (!depart || Math.hypot(e.clientX - depart.x, e.clientY - depart.y) > tolerance) return;
+      if (e.pointerType === 'touch') {
+        const maintenant = performance.now();
+        const double = maintenant - dernierToucher.t < 350 && Math.hypot(e.clientX - dernierToucher.x, e.clientY - dernierToucher.y) < 40;
+        dernierToucher = { t: double ? 0 : maintenant, x: e.clientX, y: e.clientY };
+        if (double) {
+          doubleToucher = maintenant;
+          this.entrer(e.clientX, e.clientY);
+          return;
+        }
+      }
       if (this.inspection.actif) {
         this.inspection.clic(e.clientX, e.clientY);
         return;
@@ -665,22 +680,39 @@ export class Monde {
       if (!this.sitePromenade) this.pointeurEnAttente = { x: e.clientX, y: e.clientY };
     });
     this.canvas.addEventListener('dblclick', (e) => {
-      if (this.inspection.actif) {
-        this.inspection.doubleClic(e.clientX, e.clientY);
-        return;
-      }
-      let selection: ReturnType<typeof trouverEquipement>;
-      if (this.sitePromenade) {
-        this.rayon.setFromCamera(this.pointeur.set(0, 0), this.camera);
-        selection = this.premierEquipement();
-      } else {
-        selection = this.viser(e.clientX, e.clientY);
-      }
-      if (selection) this.surEntrer(selection.ref, selection.racine);
+      // Un double toucher déjà traité ne doit pas compter deux fois.
+      if (performance.now() - doubleToucher < 600) return;
+      this.entrer(e.clientX, e.clientY);
     });
     this.canvas.addEventListener('pointerleave', () => {
       if (!this.sitePromenade) this.survole = null;
     });
+  }
+
+  /** Double-clic ou double toucher : entrer, ouvrir ou s'approcher (décidé par l'application). */
+  private entrer(clientX: number, clientY: number): void {
+    if (this.inspection.actif) {
+      this.inspection.doubleClic(clientX, clientY);
+      return;
+    }
+    let selection: ReturnType<typeof trouverEquipement>;
+    if (this.sitePromenade) {
+      this.rayon.setFromCamera(this.pointeur.set(0, 0), this.camera);
+      selection = this.premierEquipement();
+    } else {
+      selection = this.viser(clientX, clientY);
+    }
+    if (selection) this.surEntrer(selection.ref, selection.racine);
+  }
+
+  /** Joystick tactile de la visite à pied (`x` vers la droite, `y` vers l'avant, de -1 à 1). */
+  deplacementTactile(x: number, y: number): void {
+    this.promenade.deplacementTactile(x, y);
+  }
+
+  /** Bouton « Ouvrir » de la visite tactile : comme la touche E. */
+  actionPromenade(): void {
+    this.promenade.surAction();
   }
 
   /** Premier équipement visible sous le pointeur. */
@@ -724,6 +756,8 @@ export class Monde {
     this.inspection.redimensionner(largeur, hauteur);
     this.renderer.setSize(largeur, hauteur);
     this.rendu2D.setSize(largeur, hauteur);
+    // En portrait, le champ vertical s'élargit pour garder la largeur de la scène.
+    this.camera.fov = this.sitePromenade ? champVertical(68, this.camera.aspect, 95) : champVertical(42, this.camera.aspect, 100);
     if (this.sitePromenade) {
       // À pied, les panneaux latéraux sont masqués : l'image reste centrée.
       this.camera.clearViewOffset();

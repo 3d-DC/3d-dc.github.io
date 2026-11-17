@@ -154,3 +154,19 @@ export function aleatoire(graine: number): () => number {
     return etat / 4294967296;
   };
 }
+
+/** Écran tactile ou petit écran : rendu allégé (définition, ombres) et commandes au doigt. */
+export const MOBILE =
+  typeof window !== 'undefined' && (window.matchMedia('(pointer: coarse)').matches || Math.min(window.innerWidth, window.innerHeight) < 600);
+
+/**
+ * Champ de vision vertical (en degrés) qui conserve, sur un écran étroit ou en portrait, le champ horizontal
+ * qu'aurait un écran 16/10 : la scène n'est pas coupée sur les côtés d'un téléphone.
+ */
+export function champVertical(base: number, aspect: number, max = 85): number {
+  const reference = 1.6;
+  if (aspect >= reference) return base;
+  const demiHorizontal = Math.atan(Math.tan(THREE.MathUtils.degToRad(base / 2)) * reference);
+  const vertical = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(demiHorizontal) / aspect));
+  return Math.min(max, vertical);
+}

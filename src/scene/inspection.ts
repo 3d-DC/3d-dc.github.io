@@ -6,7 +6,7 @@ import { COMPOSANTS, CONTENU_BAIE, libelleUnite } from '../baies';
 import type { ComposantKind, EtatInspection, RackKind, SiteId, UniteBaie } from '../types';
 import { estExaminable, modeleExamen, type ModeleExamen } from './examen';
 import { ECART_U, U } from './facades';
-import { amortir, boite, creerCanvas, cylindre, materiau, panneau, toile } from './outils';
+import { amortir, boite, champVertical, creerCanvas, cylindre, materiau, MOBILE, panneau, toile } from './outils';
 import { cable, construireServeur, L_CHASSIS, matFacade, P_CHASSIS, type Piece, type ServeurOuvert } from './serveur';
 const H_BAIE = 2.0;
 const L_BAIE = 0.6;
@@ -193,7 +193,7 @@ export class Inspection {
     const principale = new THREE.DirectionalLight(0xffffff, 5.5);
     principale.position.set(2.5, 5, 3.5);
     principale.castShadow = true;
-    principale.shadow.mapSize.set(4096, 4096);
+    principale.shadow.mapSize.setScalar(MOBILE ? 2048 : 4096);
     const ombre = principale.shadow.camera;
     ombre.left = -2;
     ombre.right = 2;
@@ -240,13 +240,41 @@ export class Inspection {
     });
 
     // Pièce présentée : on la saisit pour la tourner dans tous les sens, la molette la rapproche.
+    // Doigts posés sur la pièce présentée : un doigt la fait tourner, deux la rapprochent ou l'éloignent.
+    const doigts = new Map<number, { x: number; y: number }>();
+    let ecart = 0;
+    const distance = (): number => {
+      const [a, b] = [...doigts.values()];
+      return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+    };
     canvas.addEventListener('pointerdown', (e) => {
       const p = this.presentation;
-      if (p && p.sens === 1 && p.t >= 1 && e.button === 0) this.saisie = { x: e.clientX, y: e.clientY };
+      if (!p || p.sens !== 1 || p.t < 1 || e.button !== 0) return;
+      doigts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (doigts.size === 2) {
+        this.saisie = null;
+        ecart = distance();
+      } else if (doigts.size === 1) {
+        this.saisie = { x: e.clientX, y: e.clientY };
+      }
     });
+    const lever = (e: PointerEvent): void => {
+      doigts.delete(e.pointerId);
+      this.saisie = null;
+    };
+    window.addEventListener('pointerup', lever);
+    window.addEventListener('pointercancel', lever);
     window.addEventListener('pointermove', (e) => {
       const p = this.presentation;
-      if (!this.saisie || !p) return;
+      if (!p) return;
+      if (doigts.has(e.pointerId)) doigts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (doigts.size === 2) {
+        const d = distance();
+        if (ecart > 0 && d > 0) p.zoom = THREE.MathUtils.clamp(p.zoom * (d / ecart), 0.45, 3);
+        ecart = d;
+        return;
+      }
+      if (!this.saisie) return;
       const dx = e.clientX - this.saisie.x;
       const dy = e.clientY - this.saisie.y;
       this.saisie = { x: e.clientX, y: e.clientY };
@@ -255,9 +283,6 @@ export class Inspection {
       const q = new THREE.Quaternion().setFromAxisAngle(AXE_Y, dx * 0.011);
       q.multiply(new THREE.Quaternion().setFromAxisAngle(AXE_X, dy * 0.011));
       p.rotation.premultiply(q);
-    });
-    window.addEventListener('pointerup', () => {
-      this.saisie = null;
     });
     canvas.addEventListener(
       'wheel',
@@ -310,6 +335,7 @@ export class Inspection {
 
   redimensionner(largeur: number, hauteur: number): void {
     this.camera.aspect = largeur / hauteur;
+    this.camera.fov = champVertical(40, this.camera.aspect);
     this.camera.updateProjectionMatrix();
     this.rendu2D.setSize(largeur, hauteur);
   }
@@ -625,7 +651,9 @@ export class Inspection {
     const avant = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
     const arrivee = cam.position.clone().addScaledVector(avant, DISTANCE_PRESENTATION);
     const hauteurVue = 2 * DISTANCE_PRESENTATION * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
-    const echelle = (hauteurVue * PART_ECRAN * p.zoom) / p.taille;
+    // En portrait, c'est la largeur de l'écran qui limite la taille de la pièce.
+    const vue = Math.min(hauteurVue, hauteurVue * cam.aspect * 0.9);
+    const echelle = (vue * PART_ECRAN * p.zoom) / p.taille;
     const qArrivee = cam.quaternion
       .clone()
       .multiply(p.rotation)

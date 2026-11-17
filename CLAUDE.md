@@ -8,6 +8,10 @@ Démo Three.js d'un datacenter modulaire sur deux sites (`DC1`, `DC2`) reliés p
 - `npm run typecheck` : vérification TypeScript seule
 - `npm run build` : vérification des types puis build de production dans `dist/`
 
+## Déploiement
+
+GitHub Pages, par l'action `.github/workflows/deploy.yml` : à chaque envoi sur `main`, elle installe, compile et publie `dist/`. Réglage unique dans le dépôt : Settings › Pages › Source : « GitHub Actions ». Adresse : https://benyacinesawadogo.github.io/3D-DC/. `vite.config.ts` utilise des chemins relatifs (`base: './'`), le site fonctionne donc quel que soit le nom du dépôt.
+
 ## Technique
 
 Three.js + Vite + TypeScript strict (`noUncheckedIndexedAccess` activé), sans framework d'interface. Pas de backend ni de stockage : tout l'état vit en mémoire. Aucun modèle 3D ni fichier audio externe : toute la géométrie est construite par le code, les textures sont dessinées sur canvas et les sons synthétisés par Web Audio.
@@ -63,6 +67,13 @@ Interface de simulation (HUD) superposée à la scène ; chaque élément a une 
 - Inspection : fil d'Ariane en haut à gauche avec un bouton de retour ; la barre d'outils et la télémétrie disparaissent. Visite à pied : volet de la visite en haut à gauche (réductible), la télémétrie reste.
 - Repères de la scène (étiquettes des sites, de la fibre, des utilisateurs) : compacts, masquables par `Affichage.reperes` (case du volet Affichage, classe `sans-reperes` sur le calque d'étiquettes).
 - Style : panneaux sombres presque opaques, filets fins, coins de 6 px, valeurs et touches en police à chasse fixe, un seul accent (`--accent`), pas d'émoji. Les légendes (familles, liaisons, VM) sont dans le volet Légende.
+
+## Mobile et tactile
+
+`MOBILE` (`outils.ts`) détecte un écran tactile ou petit : définition plafonnée à 1,25, ombres en 2048 au lieu de 4096. En portrait, `champVertical` élargit le champ vertical pour garder la largeur de la scène (caméra orbitale, visite, inspection) ; la pièce présentée se dimensionne sur la plus petite dimension de l'écran.
+- Gestes : un doigt tourne, deux doigts zooment et déplacent (OrbitControls) ; toucher = clic (tolérance de 12 px) ; deux touchers rapprochés = double-clic, reconnus dans `Monde` (les navigateurs mobiles n'émettent pas toujours `dblclick`). Pièce présentée : un doigt la tourne, deux la rapprochent (pincement).
+- Visite à pied au doigt : pas de capture de la souris ; glisser pour regarder (`Promenade`, événements `pointermove`), joystick en bas à gauche (`Promenade.deplacementTactile`, poussé à fond : course), boutons « Ouvrir » et « Sortir » en bas à droite ; le volet de la visite commence replié.
+- Interface (écrans de 760 px et moins) : la barre d'outils devient une barre d'onglets en bas (pictogramme et libellé court), volets et fiches montent du bas en tiroirs, une fiche qui s'ouvre referme le volet, la télémétrie se compacte en haut, la narration passe au-dessus des onglets, la consigne n'apparaît que dans l'inspection. Les consignes tactiles remplacent les consignes clavier et souris. `touch-action: none` sur la scène, marges de sécurité (`env(safe-area-inset-*)`) pour les écrans à encoche.
 
 ## Flux et machines virtuelles
 

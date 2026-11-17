@@ -1128,7 +1128,8 @@ kbd {
   opacity: 1;
 }
 
-.hud-masque > :not(.reafficher) {
+/* Le joystick et les boutons de la visite restent : sans eux, impossible de bouger au doigt. */
+.hud-masque > :not(.reafficher):not(.joystick):not(.boutons-visite) {
   display: none !important;
 }
 
@@ -1359,4 +1360,357 @@ kbd {
 .jauge-gaz i {
   background: #e2e8f0;
   transition: none;
+}
+
+/* ======================================================================
+ * Écrans tactiles et téléphones
+ * ====================================================================== */
+
+#scene {
+  touch-action: none;
+}
+
+html,
+body {
+  overscroll-behavior: none;
+}
+
+#ui button,
+#ui input {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#ui {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.rail-libelle {
+  display: none;
+}
+
+/* Pas d'infobulle au survol sur un écran tactile. */
+@media (hover: none) {
+  .bouton-icone[data-titre]:hover::after {
+    display: none;
+  }
+}
+
+/* Visite à pied au doigt : joystick en bas à gauche, boutons en bas à droite. */
+.joystick,
+.boutons-visite {
+  display: none;
+}
+
+.tactile.mode-promenade:not(.mode-inspection) .joystick {
+  display: block;
+}
+
+.tactile.mode-promenade:not(.mode-inspection) .boutons-visite {
+  display: flex;
+}
+
+.joystick {
+  position: absolute;
+  left: 22px;
+  bottom: calc(26px + env(safe-area-inset-bottom));
+  width: 124px;
+  height: 124px;
+  border-radius: 50%;
+  background: rgba(10, 14, 20, 0.42);
+  border: 1px solid var(--filet-fort);
+  touch-action: none;
+}
+
+.joystick::before {
+  content: '';
+  position: absolute;
+  inset: 22px;
+  border-radius: 50%;
+  border: 1px dashed rgba(148, 163, 184, 0.25);
+}
+
+.manette {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 54px;
+  height: 54px;
+  margin: -27px 0 0 -27px;
+  border-radius: 50%;
+  background: rgba(230, 235, 241, 0.85);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.boutons-visite {
+  position: absolute;
+  right: 18px;
+  bottom: calc(30px + env(safe-area-inset-bottom));
+  flex-direction: column;
+  gap: 10px;
+}
+
+.boutons-visite .bouton-outil {
+  min-width: 68px;
+  min-height: 60px;
+  justify-content: center;
+  background: var(--panneau);
+  border: 1px solid var(--filet-fort);
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  :root {
+    --marge: 8px;
+    /* Hauteur de la barre d'onglets du bas, encoche comprise. */
+    --bas: calc(60px + env(safe-area-inset-bottom));
+  }
+
+  /* Barre d'outils : onglets en bas de l'écran, pictogramme et libellé. */
+  .rail {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 6;
+    flex-direction: row;
+    gap: 0;
+    padding: 4px 2px calc(4px + env(safe-area-inset-bottom));
+    border-radius: 0;
+    border-width: 1px 0 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .rail-separateur {
+    display: none;
+  }
+
+  .rail-bouton {
+    flex: 1 0 54px;
+    height: 52px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+  }
+
+  .rail-libelle {
+    display: block;
+    font-size: 9.5px;
+    letter-spacing: 0.02em;
+  }
+
+  /* Volets et fiches : tiroirs qui montent du bas, au-dessus des onglets. */
+  .volet-outil,
+  .pile-droite {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: var(--bas);
+    width: auto;
+    border-radius: 14px 14px 0 0;
+  }
+
+  .volet-outil {
+    z-index: 5;
+    max-height: 62vh;
+    border-bottom: none;
+  }
+
+  .volet-outil .volet-entete {
+    position: relative;
+    padding-top: 14px;
+  }
+
+  /* Poignée du tiroir */
+  .volet-outil .volet-entete::before {
+    content: '';
+    position: absolute;
+    top: 5px;
+    left: 50%;
+    width: 36px;
+    height: 4px;
+    margin-left: -18px;
+    border-radius: 2px;
+    background: var(--filet-fort);
+  }
+
+  .pile-droite {
+    z-index: 4;
+    max-height: 56vh;
+    gap: 0;
+  }
+
+  .pile-droite .carte {
+    border-radius: 14px 14px 0 0;
+  }
+
+  .pile-droite .carte + .carte {
+    border-radius: 0;
+  }
+
+  .mode-inspection .pile-droite {
+    top: auto;
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    max-height: 48vh;
+  }
+
+  /* Télémétrie : bandeau compact en haut. */
+  .telemetrie {
+    display: flex;
+    top: calc(var(--marge) + env(safe-area-inset-top));
+    left: var(--marge);
+    right: var(--marge);
+    gap: 4px;
+  }
+
+  .tele-site {
+    flex: 1;
+    min-width: 0;
+    gap: 4px;
+    padding: 5px 7px 6px;
+  }
+
+  .tele-entete strong {
+    font-size: 12px;
+  }
+
+  .tele-role {
+    font-size: 8.5px;
+  }
+
+  .tele-mesure .tele-libelle,
+  .tele-details {
+    display: none;
+  }
+
+  .tele-mesure {
+    grid-template-columns: 1fr auto;
+  }
+
+  .tele-lien {
+    flex: none;
+    padding: 5px 7px;
+  }
+
+  .tele-lien .tele-libelle {
+    font-size: 8.5px;
+  }
+
+  .tele-lien .tele-valeur {
+    font-size: 10.5px;
+  }
+
+  .mode-promenade .telemetrie {
+    display: none;
+  }
+
+  /* Narration : au-dessus des onglets, toute la largeur. */
+  .hud-narration {
+    left: var(--marge);
+    right: var(--marge);
+    bottom: calc(var(--bas) + 6px);
+    width: auto;
+    transform: none;
+    z-index: 3;
+  }
+
+  .hud-narration p {
+    font-size: 12.5px;
+    max-height: 22vh;
+    overflow-y: auto;
+  }
+
+  /* Consigne : seulement dans l'inspection, sous le fil d'Ariane. */
+  .hud-consigne {
+    display: none;
+  }
+
+  .mode-inspection .hud-consigne {
+    display: block;
+    left: var(--marge);
+    right: var(--marge);
+    max-width: none;
+    font-size: 11px;
+  }
+
+  .hud-fil {
+    top: calc(var(--marge) + env(safe-area-inset-top));
+    max-width: calc(100% - 2 * var(--marge));
+  }
+
+  .fil-etapes {
+    font-size: 11.5px;
+  }
+
+  .hud-outils {
+    left: var(--marge);
+    right: var(--marge);
+    bottom: calc(var(--marge) + env(safe-area-inset-bottom));
+    transform: none;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .bouton-outil {
+    min-width: 54px;
+    padding: 7px 6px 6px;
+  }
+
+  .volet-promenade {
+    top: calc(var(--marge) + env(safe-area-inset-top));
+    left: var(--marge);
+    width: min(320px, calc(100% - 2 * var(--marge)));
+    max-height: calc(100% - 200px);
+  }
+
+  .reafficher {
+    top: calc(var(--marge) + env(safe-area-inset-top));
+  }
+
+  /* Contrôles plus confortables au doigt. */
+  .bouton,
+  .segment {
+    min-height: 38px;
+  }
+
+  .ligne-scenario {
+    padding: 10px 12px;
+  }
+
+  .case {
+    min-height: 34px;
+  }
+
+  .case input {
+    width: 20px;
+    height: 20px;
+  }
+
+  input[type='range'] {
+    height: 28px;
+  }
+
+  /* Repères de la scène plus discrets sur petit écran. */
+  .etiquette-site,
+  .etiquette-lien {
+    padding: 3px 6px;
+    font-size: 9.5px;
+  }
+
+  .etiquette-site strong,
+  .etiquette-lien strong {
+    font-size: 10.5px;
+  }
+
+  .etiquette-site > div,
+  .etiquette-lien .etat {
+    font-size: 9px;
+  }
 }

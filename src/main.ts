@@ -242,6 +242,8 @@ const ui = new Interface(
     premierePersonne: () => premierePersonneIci(),
     eclairage: (modif) => reglerEclairage(modif),
     son: (modif) => reglerSon(modif),
+    joystick: (x, y) => monde.deplacementTactile(x, y),
+    ouvrirVisee: () => monde.actionPromenade(),
     quitterPromenade,
   },
   SCENARIOS,
