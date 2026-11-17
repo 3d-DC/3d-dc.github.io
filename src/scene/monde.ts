@@ -86,6 +86,8 @@ const AMBIANCES: Record<Ambiance, { soleil: number; ciel: number; reflets: numbe
 const EXPOSITION = 0.62;
 /** Hauteur minimale de la caméra orbitale au-dessus du terrain. */
 const SOL_CAMERA = 1.2;
+/** Distance minimale entre la caméra orbitale et son point visé : en deçà, le point visé recule. */
+const DISTANCE_NAVIGATION = 5;
 /** Distance maximale du point visé au centre de la carte (le terrain s'étend sur 700 m). */
 const LIMITE_CARTE = 260;
 /** Surcroît d'exposition sous un toit, quand l'adaptation est active. */
@@ -194,7 +196,8 @@ export class Monde {
     // La molette rapproche vers l'endroit pointé, comme dans un logiciel de cartographie.
     this.controles.zoomToCursor = true;
     this.controles.maxPolarAngle = Math.PI / 2 - 0.04;
-    this.controles.minDistance = 1.5;
+    // Distance minimale faible : en s'approchant, c'est le point visé qui recule (voir `garderDistanceNavigation`).
+    this.controles.minDistance = 0.6;
     this.controles.maxDistance = 260;
     this.controles.addEventListener('start', () => {
       this.transition = null;
@@ -428,6 +431,7 @@ export class Monde {
       // Pendant une transition, l'inertie d'un glisser précédent ferait trembler la caméra.
       this.controles.enableDamping = this.transition === null;
       this.controles.update();
+      if (!this.transition) this.garderDistanceNavigation();
       this.garderAuDessusDuSol();
     }
     // Ombres : recalculées quand un site bouge, et sinon deux fois par seconde (hélices, VM, groupes).
@@ -475,6 +479,25 @@ export class Monde {
       sites,
       incendie: affichage.circuit === 'incendie' ? phaseIncendie(t) : null,
     });
+  }
+
+  /**
+   * Navigation rapprochée : quand on zoome vers un site, la caméra s'approche du point visé. En dessous de
+   * `DISTANCE_NAVIGATION`, le point visé est repoussé devant la caméra, dans la direction du regard : zoomer fait
+   * alors avancer, tourner pivote autour d'un point qui reste à quelques mètres, et le déplacement (proportionnel
+   * à cette distance) garde de l'ampleur. Sans cela, on reste collé au point visé et il faut dézoomer pour repartir.
+   */
+  private garderDistanceNavigation(): void {
+    const cam = this.camera.position;
+    const cible = this.controles.target;
+    const distance = cam.distanceTo(cible);
+    if (distance >= DISTANCE_NAVIGATION) return;
+    const regard = cible.clone().sub(cam);
+    if (regard.lengthSq() < 1e-8) this.camera.getWorldDirection(regard);
+    regard.normalize();
+    cible.copy(cam).addScaledVector(regard, DISTANCE_NAVIGATION);
+    // Un point visé sous le terrain serait remonté en déplaçant la caméra : on le pose plutôt au sol.
+    if (cible.y < 0) cible.y = 0;
   }
 
   /**

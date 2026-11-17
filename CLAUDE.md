@@ -119,6 +119,7 @@ Tout est synthétisé dans `src/audio/son.ts` (bruits blanc, rose et brun géné
 
 - Le rendu utilise un tampon de profondeur logarithmique (`logarithmicDepthBuffer`) : la scène va de quelques centimètres à plusieurs centaines de mètres.
 - La caméra orbitale ne descend jamais sous 1,2 m et son point visé reste au-dessus du terrain, à moins de 260 m du centre (`Monde.garderAuDessusDuSol`) ; même règle dans l'inspection (`Inspection.borner`).
+- Navigation rapprochée : le point visé reste toujours à au moins 5 m devant la caméra (`Monde.garderDistanceNavigation`, `DISTANCE_NAVIGATION`). Zoomer vers un site fait donc avancer la caméra au lieu de la coller au point visé, et rotation comme déplacement gardent leur ampleur de près.
 - Deux surfaces ne doivent jamais partager exactement le même plan (sinon elles scintillent) : décaler de quelques millimètres ou agrandir légèrement la pièce qui recouvre l'autre (ossature du module, bandeaux, socles).
 - Les ombres ne sont pas recalculées à chaque image : `Monde.maj` les rafraîchit quand un site signale `enMouvement`, et sinon deux fois par seconde. Un nouvel élément animé qui projette une ombre doit être signalé dans `Site.bouge`.
 - `figer()` (`outils.ts`) fige la transformation des maillages immobiles d'un module ; seuls les groupes restent animables. Un maillage animé doit être ajouté après l'appel à `figer`.
