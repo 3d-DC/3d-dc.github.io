@@ -239,6 +239,7 @@ const ui = new Interface(
       for (const site of SITE_IDS) etat.sites[site].assemblage = mode;
     },
     promenade: (site: SiteId) => lancerPromenade(site),
+    entrerModule: (site, module) => lancerPromenade(site, module),
     premierePersonne: () => premierePersonneIci(),
     eclairage: (modif) => reglerEclairage(modif),
     son: (modif) => reglerSon(modif),

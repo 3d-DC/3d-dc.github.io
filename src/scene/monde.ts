@@ -638,37 +638,33 @@ export class Monde {
     this.canvas.addEventListener('pointerdown', (e) => {
       depart = { x: e.clientX, y: e.clientY };
     });
+    /** Sélection au doigt différée, le temps de voir si un second toucher suit (sinon la fiche recouvrirait la scène). */
+    let selectionDifferee: number | null = null;
     this.canvas.addEventListener('pointerup', (e) => {
       // Un glisser sert à orbiter : seul un clic franc sélectionne (un doigt bouge un peu plus qu'une souris).
       const tolerance = e.pointerType === 'touch' ? 12 : 5;
       if (!depart || Math.hypot(e.clientX - depart.x, e.clientY - depart.y) > tolerance) return;
-      if (e.pointerType === 'touch') {
+      if (e.pointerType === 'touch' && !this.inspection.actif) {
         const maintenant = performance.now();
         const double = maintenant - dernierToucher.t < 350 && Math.hypot(e.clientX - dernierToucher.x, e.clientY - dernierToucher.y) < 40;
         dernierToucher = { t: double ? 0 : maintenant, x: e.clientX, y: e.clientY };
+        if (selectionDifferee !== null) {
+          window.clearTimeout(selectionDifferee);
+          selectionDifferee = null;
+        }
         if (double) {
           doubleToucher = maintenant;
           this.entrer(e.clientX, e.clientY);
           return;
         }
-      }
-      if (this.inspection.actif) {
-        this.inspection.clic(e.clientX, e.clientY);
+        const { clientX, clientY } = e;
+        selectionDifferee = window.setTimeout(() => {
+          selectionDifferee = null;
+          this.selectionner(clientX, clientY);
+        }, 320);
         return;
       }
-      if (this.sitePromenade) {
-        // À pied, on sélectionne ce qui est visé au centre de l'écran ; le clic qui capture la souris ne compte pas.
-        if (this.promenade.consommerClic()) return;
-        this.rayon.setFromCamera(this.pointeur.set(0, 0), this.camera);
-        const visee = this.premierEquipement();
-        this.surligner(visee?.racine ?? null, visee?.ref ?? null);
-        this.surSelection(visee?.ref ?? null);
-        return;
-      }
-      const selection = this.viser(e.clientX, e.clientY);
-      if (selection) son.clic();
-      this.surligner(selection?.racine ?? null, selection?.ref ?? null);
-      this.surSelection(selection?.ref ?? null);
+      this.selectionner(e.clientX, e.clientY);
     });
     this.canvas.addEventListener('pointermove', (e) => {
       if (e.buttons !== 0) return;
@@ -687,6 +683,27 @@ export class Monde {
     this.canvas.addEventListener('pointerleave', () => {
       if (!this.sitePromenade) this.survole = null;
     });
+  }
+
+  /** Clic ou toucher simple : fiche de l'équipement (pointé, ou visé au centre de l'écran à pied). */
+  private selectionner(clientX: number, clientY: number): void {
+    if (this.inspection.actif) {
+      this.inspection.clic(clientX, clientY);
+      return;
+    }
+    if (this.sitePromenade) {
+      // À pied, on sélectionne ce qui est visé au centre de l'écran ; le clic qui capture la souris ne compte pas.
+      if (this.promenade.consommerClic()) return;
+      this.rayon.setFromCamera(this.pointeur.set(0, 0), this.camera);
+      const visee = this.premierEquipement();
+      this.surligner(visee?.racine ?? null, visee?.ref ?? null);
+      this.surSelection(visee?.ref ?? null);
+      return;
+    }
+    const selection = this.viser(clientX, clientY);
+    if (selection) son.clic();
+    this.surligner(selection?.racine ?? null, selection?.ref ?? null);
+    this.surSelection(selection?.ref ?? null);
   }
 
   /** Double-clic ou double toucher : entrer, ouvrir ou s'approcher (décidé par l'application). */

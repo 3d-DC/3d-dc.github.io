@@ -62,6 +62,8 @@ export interface Actions {
   /** Cloisonne ou réunit les modules, sur les deux sites. */
   assembler(mode: Assemblage): void;
   promenade(site: SiteId): void;
+  /** Visite à pied directement à l'intérieur d'un module (bouton « Entrer » de la fiche). */
+  entrerModule(site: SiteId, module: number): void;
   /** Vue à la première personne, à l'endroit regardé. */
   premierePersonne(): void;
   /** Modifie une partie des réglages de lumière. */
@@ -776,6 +778,13 @@ export class Interface {
       const { kind, site } = ref;
       const module = ref.module ?? 1;
       corps.append(bouton('Ouvrir la baie et ses serveurs', () => this.actions.inspecter(site, module, kind), 'bouton principal large'));
+    }
+    // Module (paroi, porte, aérorefroidisseur) ou escalier : entrer d'un bouton, sans avoir à double-cliquer.
+    const { site, module } = ref;
+    if (site && module !== undefined && (ref.kind === 'conteneur' || ref.kind === 'controle-acces' || ref.kind === 'aerorefroidisseur')) {
+      corps.prepend(bouton(`Entrer dans le module ${module}`, () => this.actions.entrerModule(site, module), 'bouton principal large'));
+    } else if (site && ref.kind === 'escalier') {
+      corps.prepend(bouton(`Visiter ${site} à pied`, () => this.actions.promenade(site), 'bouton principal large'));
     }
   }
 
